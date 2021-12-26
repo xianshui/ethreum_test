@@ -50,6 +50,8 @@ setup(
             'google-cloud-storage==1.33.0',
             'sqlalchemy==1.3.13',
             'pg8000==1.13.2',
+            'boto3==1.18.11',
+            'pyarrow==6.0.1',
         ],
         'dev': [
             'pytest~=4.3.0'

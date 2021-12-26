@@ -21,6 +21,8 @@
 # SOFTWARE.
 
 import json
+import pyarrow.parquet as pq
+from pyarrow import json as pjson
 
 
 class ConsoleItemExporter:
@@ -28,11 +30,18 @@ class ConsoleItemExporter:
         pass
 
     def export_items(self, items):
+        print(f'len>>: {len(items)}')
         for item in items:
             self.export_item(item)
 
     def export_item(self, item):
-        print(json.dumps(item))
+        #print(json.dumps(item))
+        print('console output')
+        #table = pjson.read_json(json.dumps(item))
+        #table = pjson.read_json()
+        #pq.write_table(table, 'test.parquet', compression='snappy')
+
+
 
     def close(self):
         pass

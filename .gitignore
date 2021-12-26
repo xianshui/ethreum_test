@@ -47,3 +47,6 @@ coverage.xml
 .venv
 venv/
 ENV/
+*.csv
+*.parquet
+logs.json

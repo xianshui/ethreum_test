@@ -21,36 +21,22 @@
 #  SOFTWARE.
 
 from blockchainetl.jobs.exporters.console_item_exporter import ConsoleItemExporter
-from blockchainetl.jobs.exporters.multi_item_exporter import MultiItemExporter
+from blockchainetl.jobs.exporters.s3_item_exporter import S3ItemExporter
 
 
-def create_item_exporters(outputs):
-    split_outputs = [output.strip() for output in outputs.split(',')] if outputs else ['console']
-
-    item_exporters = [create_item_exporter(output) for output in split_outputs]
-    return MultiItemExporter(item_exporters)
-
-
-def create_item_exporter(output):
+def create_item_exporter(output, **kwargs):
     item_exporter_type = determine_item_exporter_type(output)
     if item_exporter_type == ItemExporterType.PUBSUB:
         from blockchainetl.jobs.exporters.google_pubsub_item_exporter import GooglePubSubItemExporter
-        enable_message_ordering = 'sorted' in output or 'ordered' in output
-        item_exporter = GooglePubSubItemExporter(
-            item_type_to_topic_mapping={
-                'block': output + '.blocks',
-                'transaction': output + '.transactions',
-                'log': output + '.logs',
-                'token_transfer': output + '.token_transfers',
-                'trace': output + '.traces',
-                'contract': output + '.contracts',
-                'token': output + '.tokens',
-            },
-            message_attributes=('item_id', 'item_timestamp'),
-            batch_max_bytes=1024 * 1024 * 5,
-            batch_max_latency=2,
-            batch_max_messages=1000,
-            enable_message_ordering=enable_message_ordering)
+        item_exporter = GooglePubSubItemExporter(item_type_to_topic_mapping={
+            'block': output + '.blocks',
+            'transaction': output + '.transactions',
+            'log': output + '.logs',
+            'token_transfer': output + '.token_transfers',
+            'trace': output + '.traces',
+            'contract': output + '.contracts',
+            'token': output + '.tokens',
+        })
     elif item_exporter_type == ItemExporterType.POSTGRES:
         from blockchainetl.jobs.exporters.postgres_item_exporter import PostgresItemExporter
         from blockchainetl.streaming.postgres_utils import create_insert_statement_for_table
@@ -68,28 +54,25 @@ def create_item_exporter(output):
                 'trace': create_insert_statement_for_table(TRACES),
             },
             converters=[UnixTimestampItemConverter(), IntToDecimalItemConverter(),
-                        ListFieldItemConverter('topics', 'topic', fill=4)])
-    elif item_exporter_type == ItemExporterType.GCS:
-        from blockchainetl.jobs.exporters.gcs_item_exporter import GcsItemExporter
-        bucket, path = get_bucket_and_path_from_gcs_output(output)
-        item_exporter = GcsItemExporter(bucket=bucket, path=path)
+                        ListFieldItemConverter('topics', 'topic', fill=6)])
     elif item_exporter_type == ItemExporterType.CONSOLE:
         item_exporter = ConsoleItemExporter()
+    elif item_exporter_type == ItemExporterType.S3:
+        from blockchainetl.jobs.exporters.converters.unix_timestamp_item_converter import UnixTimestampItemConverter
+        from blockchainetl.jobs.exporters.converters.int_to_decimal_item_converter import IntToDecimalItemConverter
+        from blockchainetl.jobs.exporters.converters.list_field_item_converter import ListFieldItemConverter
+        item_exporter = S3ItemExporter(bucket=output.split('//')[-1], converters=[UnixTimestampItemConverter()], environment=kwargs.get('environment','dev'), chain=kwargs.get('chain', 'ethereum')
+                , filename_mapping={'block': 'blocks.csv',
+            'transaction': 'transactions.csv',
+            'log': 'logs.json',
+            'token_transfer': 'token_transfers.csv',
+            'trace': 'traces.csv',
+            'contract':  'contracts.json',
+            'token': 'tokens.json'})
     else:
         raise ValueError('Unable to determine item exporter type for output ' + output)
 
     return item_exporter
-
-
-def get_bucket_and_path_from_gcs_output(output):
-    output = output.replace('gs://', '')
-    bucket_and_path = output.split('/', 1)
-    bucket = bucket_and_path[0]
-    if len(bucket_and_path) > 1:
-        path = bucket_and_path[1]
-    else:
-        path = ''
-    return bucket, path
 
 
 def determine_item_exporter_type(output):
@@ -97,8 +80,8 @@ def determine_item_exporter_type(output):
         return ItemExporterType.PUBSUB
     elif output is not None and output.startswith('postgresql'):
         return ItemExporterType.POSTGRES
-    elif output is not None and output.startswith('gs://'):
-        return ItemExporterType.GCS
+    elif output is not None and output.startswith('s3'):
+        return ItemExporterType.S3
     elif output is None or output == 'console':
         return ItemExporterType.CONSOLE
     else:
@@ -108,6 +91,6 @@ def determine_item_exporter_type(output):
 class ItemExporterType:
     PUBSUB = 'pubsub'
     POSTGRES = 'postgres'
-    GCS = 'gcs'
     CONSOLE = 'console'
+    S3 = 's3'
     UNKNOWN = 'unknown'
